@@ -1,0 +1,112 @@
+tosca_definitions_version: cloudify_dsl_1_3
+
+description: >
+  This blueprint import AWS ec2 instance to cloudify using Terraform
+  and if given a new instance_type value it will trigger
+  an update on that instance.
+
+imports:
+  - https://cloudify.co/spec/cloudify/6.2.0/types.yaml
+  - plugin:cloudify-terraform-plugin?version= >=0.15.0
+
+inputs:
+
+  resource_id:
+    type: string
+    required: true
+
+  resource_address:
+    type: string
+    required: true
+
+  aws_ami:
+    type: string
+    required: true
+
+  aws_region_name:
+    type: string
+    default: 'us-east-1'
+    constraints:
+      - valid_values:
+          - us-east-1
+          - us-east-2
+          - us-west-1
+          - us-west-2
+          - eu-central-1
+          - eu-west-1
+          - eu-west-2
+          - eu-south-1
+          - eu-west-3
+          - eu-north-1
+          - af-south-1
+          - ap-east-1
+          - ap-south-1
+          - ap-northeast-3
+          - ap-northeast-2
+          - ap-southeast-1
+          - ap-southeast-2
+          - ap-northeast-1
+          - ca-central-1
+          - cn-north-1
+          - cn-northwest-1
+          - me-south-1
+          - sa-east-1
+
+  location:
+    type: string
+    default: https://github.com/ahmadiesa-abu/terraform-import-ec2/archive/refs/heads/master.zip
+
+  source_path:
+    type: string
+    default: '.'
+
+  aws_instance_type:
+    type: string
+    default: 't2.nano'
+    constraints:
+      - valid_values:
+          - t2.nano
+          - t2.micro
+          - t2.small
+          - t2.medium
+          - t2.large
+          - t2.xlarge
+          - t2.2xlarge
+
+node_templates:
+
+  terraform:
+    type: cloudify.nodes.terraform
+
+  cloud_resources:
+    type: cloudify.nodes.terraform.Module
+    properties:
+      resource_config:
+        source:
+          location: { get_input: location }
+        source_path: { get_input: source_path }
+        variables:
+          access_key: { get_secret: aws_access_key_id }
+          secret_key: { get_secret: aws_secret_access_key }
+          aws_region: { get_input: aws_region_name }
+          instance_type: { get_input: aws_instance_type }
+          ami : { get_input: aws_ami }
+        environment_variables:
+          TF_REGISTRY_CLIENT_TIMEOUT: "20"
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        configure:
+          implementation: tf.cloudify_tf.tasks.import_resource
+          inputs:
+            resource_address: { get_input: resource_address }
+            resource_id: { get_input: resource_id }
+        start:
+          implementation: tf.cloudify_tf.tasks.plan
+        poststart:
+          implementation: tf.cloudify_tf.tasks.apply
+        delete: {}
+
+
+    relationships:
+      - target: terraform
+        type: cloudify.terraform.relationships.run_on_host
